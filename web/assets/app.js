@@ -3,7 +3,7 @@ const userIdInput = document.querySelector("#userId");
 const sessionIdInput = document.querySelector("#sessionId");
 const modelName = document.querySelector("#modelName");
 const modelProvider = document.querySelector("#modelProvider");
-const deepseekBtn = document.querySelector("#deepseekBtn");
+const modelToggleBtn = document.querySelector("#modelToggleBtn");
 const toolList = document.querySelector("#toolList");
 const timeline = document.querySelector("#timeline");
 const form = document.querySelector("#chatForm");
@@ -76,6 +76,8 @@ function updateModelCard() {
   if (!tenant) return;
   modelName.textContent = tenant.model.model;
   modelProvider.textContent = `${tenant.model.provider}, temperature ${tenant.model.temperature}`;
+  modelToggleBtn.textContent =
+    tenant.model.provider === "deepseek" ? "切回 Mock" : "切到 DeepSeek";
 }
 
 function parseSSEChunk(buffer, onEvent) {
@@ -145,15 +147,24 @@ async function streamAgent(message) {
 }
 
 tenantSelect.addEventListener("change", updateModelCard);
-deepseekBtn.addEventListener("click", async () => {
+modelToggleBtn.addEventListener("click", async () => {
+  const tenant = selectedTenant();
+  const nextModel =
+    tenant?.model.provider === "deepseek"
+      ? {
+          provider: "mock",
+          model: "mock-japanese-tutor",
+          temperature: 0.2,
+        }
+      : {
+          provider: "deepseek",
+          model: "deepseek-chat",
+          temperature: 0.3,
+        };
   const res = await fetch(`/api/tenants/${tenantSelect.value}/model`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      provider: "deepseek",
-      model: "deepseek-chat",
-      temperature: 0.3,
-    }),
+    body: JSON.stringify(nextModel),
   });
   const updated = await res.json();
   tenants = tenants.map((tenant) => (tenant.id === updated.id ? updated : tenant));

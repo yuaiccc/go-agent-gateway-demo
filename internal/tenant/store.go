@@ -32,9 +32,9 @@ func NewStore() *Store {
 				ID:   "tenant-jp",
 				Name: "Japanese Learning Team",
 				Model: ModelConfig{
-					Provider:    "mock",
-					Model:       "mock-japanese-tutor",
-					Temperature: 0.2,
+					Provider:    "deepseek",
+					Model:       "deepseek-chat",
+					Temperature: 0.3,
 				},
 				KBIDs:  []string{"grammar", "dictionary"},
 				Tools:  []string{"search_grammar", "search_memory"},

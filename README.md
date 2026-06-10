@@ -24,7 +24,7 @@ go run ./cmd/server
 http://localhost:8088
 ```
 
-如果要接 DeepSeek：
+默认的 `tenant-jp` 会走 DeepSeek。启动前需要设置：
 
 ```bash
 export DEEPSEEK_API_KEY=你的_key
@@ -32,11 +32,12 @@ go run ./cmd/server
 ```
 
 然后把租户模型切到 DeepSeek：
+如果你想手动切模型，也可以调用热更新接口。例如切回 mock：
 
 ```bash
 curl -X PATCH http://localhost:8088/api/tenants/tenant-jp/model \
   -H 'Content-Type: application/json' \
-  -d '{"provider":"deepseek","model":"deepseek-chat","temperature":0.3}'
+  -d '{"provider":"mock","model":"mock-japanese-tutor","temperature":0.2}'
 ```
 
 打开浏览器访问：
