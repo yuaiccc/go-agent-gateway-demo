@@ -3,12 +3,12 @@
 一个用于学习智能体后端平台的最小 Go/Gin 演示项目。它不是完整生产系统，而是把面试里常见的概念拆成可运行代码：
 
 - 多租户：`tenant_id` 决定模型配置、知识库和可用工具。
-- 会话/用户绑定：同一个 `session_id` 只能属于一个 `tenant_id + user_id`。
+- 会话/用户绑定：同一个 `session_id` 只能属于一个 `tenant_id + user_id`，并持久化到 SQLite。
 - Tool Registry：工具注册、发现、调用和权限检查。
 - SSE 流式事件：推送 `run_start`、`tool_call_start`、`tool_call_result`、`message_delta`、`done`。
-- MCP-style API：提供简化版 `/mcp/tools/list` 和 `/mcp/tools/call`。
+- MCP JSON-RPC：`/mcp` 支持 `initialize`、`tools/list`、`tools/call`，同时保留简化版 `/mcp/tools/list` 和 `/mcp/tools/call`。
 - 内置前端：访问 `/` 直接观察租户、工具调用和 SSE 流式输出。
-- DeepSeek/OpenAI 兼容模型适配器：通过环境变量接真实模型，不把 API key 写进仓库。
+- DeepSeek/OpenAI 兼容模型适配器：通过环境变量接真实模型，并把上游 streaming delta 原样转成前端 SSE。
 
 ## 运行
 
@@ -22,6 +22,12 @@ go run ./cmd/server
 
 ```text
 http://localhost:8088
+```
+
+运行后会自动创建 SQLite：
+
+```text
+data/gateway.sqlite
 ```
 
 默认的 `tenant-jp` 会走 DeepSeek。启动前需要设置：
@@ -104,6 +110,35 @@ data: {...}
 
 ### MCP 风格工具
 
+JSON-RPC 入口：
+
+```bash
+curl -X POST http://localhost:8088/mcp \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+调用工具：
+
+```bash
+curl -X POST http://localhost:8088/mcp \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "tools/call",
+    "params": {
+      "name": "search_grammar",
+      "arguments": {
+        "query": "召し上がる 尊敬语",
+        "top_k": 2
+      }
+    }
+  }'
+```
+
+兼容旧的教学端点：
+
 列出工具：
 
 ```bash
@@ -120,6 +155,26 @@ curl -X POST http://localhost:8088/mcp/tools/call \
     "name": "search_grammar",
     "arguments": {
       "query": "召し上がる 尊敬语"
+    }
+  }'
+```
+
+记忆检索会查询 SQLite，需要租户和用户：
+
+```bash
+curl -X POST http://localhost:8088/mcp \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 3,
+    "method": "tools/call",
+    "params": {
+      "name": "search_memory",
+      "arguments": {
+        "tenant_id": "tenant-jp",
+        "user_id": "user-001",
+        "query": "记忆薄弱点"
+      }
     }
   }'
 ```
@@ -145,8 +200,12 @@ internal/gateway/server.go  Gin API、SSE、MCP-style endpoint
 internal/agent/agent.go     简化 tool-call loop
 internal/model/client.go    mock / DeepSeek provider 适配
 internal/tool/registry.go   工具注册、发现、调用
+internal/tool/grammar.go    本地 markdown chunk 加载和检索
+internal/tool/memory.go     SQLite memory 检索
+internal/store/db.go        SQLite migration 和 seed
 internal/tenant/store.go    租户模型配置和热更新
-internal/session/store.go   session 与 user/tenant 绑定
+internal/session/store.go   session 与 user/tenant 绑定和持久化
+data/grammar/*.md           本地语法文档 chunk 来源
 web/index.html              无构建步骤的演示前端
 web/assets/app.js           fetch + ReadableStream 解析 SSE
 ```
@@ -162,16 +221,18 @@ web/assets/app.js           fetch + ReadableStream 解析 SSE
 - 会话/用户绑定：看 `session.Store.ValidateOwner`。
 - 工具调用流程：看 `agent.Service.Run` 和 `tool.Registry.Call`。
 - SSE 数据格式：看 `gateway.streamAgent`。
-- MCP 交互流程：看 `/mcp/tools/list` 和 `/mcp/tools/call`。
+- MCP 交互流程：看 `POST /mcp` 的 JSON-RPC `initialize`、`tools/list`、`tools/call`。
+- RAG/检索：看 `search_grammar` 如何从 `data/grammar/*.md` chunk 检索。
+- 记忆：看 `search_memory` 如何按 `tenant_id + user_id` 查询 SQLite。
 
 ## 暂未实现
 
 为了保持教学清晰，暂时没有做：
 
-- 真实 MCP JSON-RPC 协议握手。
-- 数据库持久化。
 - JWT/Auth/RBAC。
 - Docker sandbox。
-- 向量库和 embedding。
+- 向量库、embedding 和 reranker。
+- 完整 MCP SDK transport/session 生命周期。
+- provider 密钥托管、限流、重试和熔断。
 
-其中真实 LLM API 已提供 DeepSeek/OpenAI-compatible 的最小适配，但还没有做 streaming model delta、重试、限流和 provider 密钥托管。
+其中 `search_grammar` 是本地文档 chunk 的关键词检索，不是向量检索；`search_memory` 和 session 已经落 SQLite。

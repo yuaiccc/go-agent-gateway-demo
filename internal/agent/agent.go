@@ -63,7 +63,7 @@ func (s *Service) Run(ctx context.Context, cfg tenant.Config, req ChatRequest, e
 		return err
 	}
 
-	calls := planToolCalls(req.Message)
+	calls := enrichToolCalls(planToolCalls(req.Message), req)
 	var observations []tool.Result
 	for _, call := range calls {
 		if !cfg.AllowsTool(call.Name) {
@@ -105,32 +105,35 @@ func (s *Service) Run(ctx context.Context, cfg tenant.Config, req ChatRequest, e
 		}
 	}
 
-	answer, err := s.Models.Generate(ctx, cfg.Model, req.Message, observations)
-	if err != nil {
-		return emit(errorEvent(base, err.Error()))
-	}
-	for _, token := range strings.Split(answer, "") {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
+	var answer strings.Builder
+	if err := s.Models.Stream(ctx, cfg.Model, req.Message, observations, func(token string) error {
+		answer.WriteString(token)
 		ev := base
 		ev.Type = "message_delta"
 		ev.Delta = token
 		ev.Timestamp = time.Now()
-		if err := emit(ev); err != nil {
-			return err
-		}
-		time.Sleep(8 * time.Millisecond)
+		return emit(ev)
+	}); err != nil {
+		return emit(errorEvent(base, err.Error()))
 	}
 
 	done := base
 	done.Type = "done"
 	done.Status = "completed"
-	done.Data = map[string]any{"answer": answer}
+	done.Data = map[string]any{"answer": answer.String()}
 	done.Timestamp = time.Now()
 	return emit(done)
+}
+
+func enrichToolCalls(calls []tool.Call, req ChatRequest) []tool.Call {
+	for i := range calls {
+		if calls[i].Arguments == nil {
+			calls[i].Arguments = map[string]any{}
+		}
+		calls[i].Arguments["tenant_id"] = req.TenantID
+		calls[i].Arguments["user_id"] = req.UserID
+	}
+	return calls
 }
 
 func planToolCalls(message string) []tool.Call {

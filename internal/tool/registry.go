@@ -3,7 +3,6 @@ package tool
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 )
 
@@ -35,9 +34,13 @@ type Registry struct {
 
 func NewRegistry() *Registry {
 	r := &Registry{tools: make(map[string]Definition)}
+	grammar, err := LoadGrammarIndex("")
+	if err != nil {
+		grammar = &GrammarIndex{}
+	}
 	r.Register(Definition{
 		Name:        "search_grammar",
-		Description: "Search a small Japanese grammar knowledge base.",
+		Description: "Search local Japanese grammar markdown chunks.",
 		Schema: map[string]any{
 			"type":     "object",
 			"required": []string{"query"},
@@ -46,21 +49,71 @@ func NewRegistry() *Registry {
 				"top_k": map[string]any{"type": "integer"},
 			},
 		},
-		Handler: searchGrammar,
+		Handler: func(ctx context.Context, args map[string]any) (any, error) {
+			return grammar.Search(ctx, stringArg(args, "query"), intArg(args, "top_k", 3)), nil
+		},
 	})
+	r.RegisterMemory(nil)
+	return r
+}
+
+func NewRegistryWithStores(grammar *GrammarIndex, memory *MemoryStore) *Registry {
+	if grammar == nil {
+		grammar = &GrammarIndex{}
+	}
+	r := &Registry{tools: make(map[string]Definition)}
 	r.Register(Definition{
-		Name:        "search_memory",
-		Description: "Search learner memory and review state.",
+		Name:        "search_grammar",
+		Description: "Search local Japanese grammar markdown chunks.",
 		Schema: map[string]any{
 			"type":     "object",
 			"required": []string{"query"},
 			"properties": map[string]any{
 				"query": map[string]any{"type": "string"},
+				"top_k": map[string]any{"type": "integer"},
 			},
 		},
-		Handler: searchMemory,
+		Handler: func(ctx context.Context, args map[string]any) (any, error) {
+			return grammar.Search(ctx, stringArg(args, "query"), intArg(args, "top_k", 3)), nil
+		},
 	})
+	r.RegisterMemory(memory)
 	return r
+}
+
+func (r *Registry) RegisterMemory(memory *MemoryStore) {
+	r.Register(Definition{
+		Name:        "search_memory",
+		Description: "Search learner memory stored in SQLite.",
+		Schema: map[string]any{
+			"type":     "object",
+			"required": []string{"query", "tenant_id", "user_id"},
+			"properties": map[string]any{
+				"query":     map[string]any{"type": "string"},
+				"tenant_id": map[string]any{"type": "string"},
+				"user_id":   map[string]any{"type": "string"},
+				"top_k":     map[string]any{"type": "integer"},
+			},
+		},
+		Handler: func(ctx context.Context, args map[string]any) (any, error) {
+			if memory == nil {
+				return map[string]any{
+					"results": []map[string]any{
+						{
+							"memory_id": "mem-demo",
+							"content":   "未接入 SQLite，返回 Registry 默认演示记忆。",
+							"score":     0.1,
+						},
+					},
+				}, nil
+			}
+			tenantID, userID, err := ownerArgs(args)
+			if err != nil {
+				return nil, err
+			}
+			return memory.Search(ctx, tenantID, userID, stringArg(args, "query"), intArg(args, "top_k", 3))
+		},
+	})
 }
 
 func (r *Registry) Register(def Definition) {
@@ -101,63 +154,4 @@ func (r *Registry) Call(ctx context.Context, call Call) (Result, error) {
 func stringArg(args map[string]any, key string) string {
 	value, _ := args[key].(string)
 	return value
-}
-
-func searchGrammar(_ context.Context, args map[string]any) (any, error) {
-	query := strings.ToLower(stringArg(args, "query"))
-	hits := []map[string]any{}
-
-	knowledge := []map[string]string{
-		{
-			"source":  "grammar/te-form.md#usage",
-			"title":   "て形",
-			"content": "一段动词把る去掉后接て，例如 食べる -> 食べて。て形可以连接动作、提出请求、表达状态延续。",
-		},
-		{
-			"source":  "grammar/keigo.md#sonkeigo",
-			"title":   "尊敬语",
-			"content": "召し上がる 是 食べる/飲む 的尊敬语，用于描述对方或上级的动作，不能用于自己。",
-		},
-		{
-			"source":  "grammar/particles.md#wa-ga",
-			"title":   "は 和 が",
-			"content": "は 标记话题，が 标记主语或焦点。新信息、存在句和强调主语时常用 が。",
-		},
-	}
-
-	for _, item := range knowledge {
-		blob := strings.ToLower(item["title"] + " " + item["content"])
-		if query == "" || strings.Contains(blob, query) || strings.Contains(query, strings.ToLower(item["title"])) {
-			hits = append(hits, map[string]any{
-				"source":  item["source"],
-				"title":   item["title"],
-				"content": item["content"],
-				"score":   0.88,
-			})
-		}
-	}
-
-	if len(hits) == 0 {
-		hits = append(hits, map[string]any{
-			"source":  "grammar/index.md",
-			"title":   "fallback",
-			"content": "未命中精确语法点，可尝试改写 query 或调用 web/search 工具。",
-			"score":   0.31,
-		})
-	}
-	return map[string]any{"results": hits}, nil
-}
-
-func searchMemory(_ context.Context, args map[string]any) (any, error) {
-	query := stringArg(args, "query")
-	return map[string]any{
-		"results": []map[string]any{
-			{
-				"memory_id": "mem-001",
-				"content":   "学习者最近在练习 食べる、飲む、行く 的活用，て形和敬语是薄弱点。",
-				"query":     query,
-				"score":     0.76,
-			},
-		},
-	}, nil
 }

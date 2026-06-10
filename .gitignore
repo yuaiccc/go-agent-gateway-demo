@@ -14,3 +14,7 @@ coverage.out
 # Editor
 .idea/
 .vscode/
+
+# Local demo state
+data/*.sqlite
+data/*.sqlite-*
