@@ -8,6 +8,7 @@
 - SSE 流式事件：推送 `run_start`、`tool_call_start`、`tool_call_result`、`message_delta`、`done`。
 - MCP-style API：提供简化版 `/mcp/tools/list` 和 `/mcp/tools/call`。
 - 内置前端：访问 `/` 直接观察租户、工具调用和 SSE 流式输出。
+- DeepSeek/OpenAI-compatible model adapter：通过环境变量接真实模型，不把 API key 写进仓库。
 
 ## Run
 
@@ -21,6 +22,21 @@ go run ./cmd/server
 
 ```text
 http://localhost:8088
+```
+
+如果要接 DeepSeek：
+
+```bash
+export DEEPSEEK_API_KEY=你的_key
+go run ./cmd/server
+```
+
+然后把租户模型切到 DeepSeek：
+
+```bash
+curl -X PATCH http://localhost:8088/api/tenants/tenant-jp/model \
+  -H 'Content-Type: application/json' \
+  -d '{"provider":"deepseek","model":"deepseek-chat","temperature":0.3}'
 ```
 
 打开浏览器访问：
@@ -126,6 +142,7 @@ HTTP/SSE Client
 cmd/server/main.go          启动入口
 internal/gateway/server.go  Gin API、SSE、MCP-style endpoint
 internal/agent/agent.go     简化 tool-call loop
+internal/model/client.go    mock / DeepSeek provider 适配
 internal/tool/registry.go   工具注册、发现、调用
 internal/tenant/store.go    租户模型配置和热更新
 internal/session/store.go   session 与 user/tenant 绑定
@@ -139,6 +156,7 @@ web/assets/app.js           fetch + ReadableStream 解析 SSE
 
 - 多模型支持架构：看 `tenant.ModelConfig`。
 - 多租户模型热更新：看 `PATCH /api/tenants/:tenantID/model`。
+- 模型 provider 适配：看 `internal/model/client.go`。
 - Agent 状态：看 SSE event type。
 - Session/User 绑定：看 `session.Store.ValidateOwner`。
 - 工具调用流程：看 `agent.Service.Run` 和 `tool.Registry.Call`。
@@ -149,11 +167,10 @@ web/assets/app.js           fetch + ReadableStream 解析 SSE
 
 为了保持教学清晰，暂时没有做：
 
-- 真实 LLM API 调用。
 - 真实 MCP JSON-RPC 协议握手。
 - 数据库持久化。
 - JWT/Auth/RBAC。
 - Docker sandbox。
 - 向量库和 embedding。
 
-这些可以作为下一阶段扩展。
+其中真实 LLM API 已提供 DeepSeek/OpenAI-compatible 的最小适配，但还没有做 streaming model delta、重试、限流和 provider 密钥托管。

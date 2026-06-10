@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yuaiccc/go-agent-gateway-demo/internal/model"
 	"github.com/yuaiccc/go-agent-gateway-demo/internal/tenant"
 	"github.com/yuaiccc/go-agent-gateway-demo/internal/tool"
 )
@@ -34,11 +35,15 @@ type Event struct {
 }
 
 type Service struct {
-	Tools *tool.Registry
+	Tools  *tool.Registry
+	Models *model.Client
 }
 
 func NewService(tools *tool.Registry) *Service {
-	return &Service{Tools: tools}
+	return &Service{
+		Tools:  tools,
+		Models: model.NewClient(),
+	}
 }
 
 func (s *Service) Run(ctx context.Context, cfg tenant.Config, req ChatRequest, emit func(Event) error) error {
@@ -100,7 +105,10 @@ func (s *Service) Run(ctx context.Context, cfg tenant.Config, req ChatRequest, e
 		}
 	}
 
-	answer := synthesize(req.Message, observations)
+	answer, err := s.Models.Generate(ctx, cfg.Model, req.Message, observations)
+	if err != nil {
+		return emit(errorEvent(base, err.Error()))
+	}
 	for _, token := range strings.Split(answer, "") {
 		select {
 		case <-ctx.Done():
@@ -164,27 +172,6 @@ func planToolCalls(message string) []tool.Call {
 		})
 	}
 	return calls
-}
-
-func synthesize(message string, observations []tool.Result) string {
-	if len(observations) == 0 {
-		return "我没有拿到工具结果，因此只能给出保守回答。建议补充知识库或重试。"
-	}
-
-	var b strings.Builder
-	b.WriteString("这是一个 demo agent 的回答：\n\n")
-	b.WriteString("我根据问题「")
-	b.WriteString(message)
-	b.WriteString("」调用了 ")
-	b.WriteString(fmt.Sprintf("%d", len(observations)))
-	b.WriteString(" 个工具。\n\n")
-	for _, obs := range observations {
-		b.WriteString("- 工具 `")
-		b.WriteString(obs.Name)
-		b.WriteString("` 返回了可用上下文。\n")
-	}
-	b.WriteString("\n在真实系统里，这一步会把 tool results 回填给模型，由模型生成带引用的最终答案。")
-	return b.String()
 }
 
 func with(base Event, eventType string, data any) Event {

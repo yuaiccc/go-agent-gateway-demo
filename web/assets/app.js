@@ -3,6 +3,7 @@ const userIdInput = document.querySelector("#userId");
 const sessionIdInput = document.querySelector("#sessionId");
 const modelName = document.querySelector("#modelName");
 const modelProvider = document.querySelector("#modelProvider");
+const deepseekBtn = document.querySelector("#deepseekBtn");
 const toolList = document.querySelector("#toolList");
 const timeline = document.querySelector("#timeline");
 const form = document.querySelector("#chatForm");
@@ -144,6 +145,21 @@ async function streamAgent(message) {
 }
 
 tenantSelect.addEventListener("change", updateModelCard);
+deepseekBtn.addEventListener("click", async () => {
+  const res = await fetch(`/api/tenants/${tenantSelect.value}/model`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      provider: "deepseek",
+      model: "deepseek-chat",
+      temperature: 0.3,
+    }),
+  });
+  const updated = await res.json();
+  tenants = tenants.map((tenant) => (tenant.id === updated.id ? updated : tenant));
+  updateModelCard();
+  appendEvent("model_updated", updated.model ?? updated);
+});
 clearBtn.addEventListener("click", () => {
   timeline.innerHTML = "";
 });
