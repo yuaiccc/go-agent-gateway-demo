@@ -49,6 +49,9 @@ async function loadTenants() {
   tenantSelect.innerHTML = tenants
     .map((tenant) => `<option value="${tenant.id}">${tenant.name}</option>`)
     .join("");
+  if (tenants.some((tenant) => tenant.id === "tenant-jp")) {
+    tenantSelect.value = "tenant-jp";
+  }
   updateModelCard();
 }
 
