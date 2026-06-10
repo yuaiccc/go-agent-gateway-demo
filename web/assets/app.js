@@ -82,6 +82,7 @@ async function loadTenants() {
   if (tenants.some((tenant) => tenant.id === "tenant-jp")) {
     tenantSelect.value = "tenant-jp";
   }
+  sessionIdInput.value = newSessionId();
   updateModelCard();
 }
 
@@ -144,7 +145,7 @@ function parseSSEChunk(buffer, onEvent) {
   return rest;
 }
 
-async function streamAgent(message) {
+async function streamAgent(message, retryOnForbidden = true) {
   sendBtn.disabled = true;
   const answerNode = appendAnswerNode();
   let buffer = "";
@@ -171,9 +172,20 @@ async function streamAgent(message) {
       body,
       hint:
         res.status === 403
-          ? "当前会话 ID 已经属于其他租户或用户。已自动换一个新会话，请再发送一次。"
+          ? "当前会话 ID 已经属于其他租户或用户。已自动换一个新会话。"
           : undefined,
     });
+    if (res.status === 403 && retryOnForbidden) {
+      sessionIdInput.value = newSessionId();
+      answerNode.remove();
+      appendEvent("session_reset", {
+        session_id: sessionIdInput.value,
+        reason: "会话归属冲突，已自动创建新会话并重试。",
+      });
+      await streamAgent(message, false);
+      sendBtn.disabled = false;
+      return;
+    }
     if (res.status === 403) {
       sessionIdInput.value = newSessionId();
     }
