@@ -20,7 +20,7 @@ const eventNames = {
   tool_call_start: "工具调用开始",
   tool_call_result: "工具调用结果",
   message_delta: "回答增量",
-  done: "运行完成",
+  done: "运行结束",
   error: "错误",
   model_updated: "模型已切换",
   session_reset: "会话已重置",
@@ -59,6 +59,20 @@ function appendAnswerNode() {
   node.className = "answer";
   timeline.appendChild(node);
   return node;
+}
+
+function displayPayload(type, payload) {
+  if (type !== "done" || !payload?.data?.answer) {
+    return payload;
+  }
+  const { answer, ...restData } = payload.data;
+  return {
+    ...payload,
+    data: {
+      ...restData,
+      answer_chars: answer.length,
+    },
+  };
 }
 
 function escapeHtml(value) {
@@ -181,7 +195,7 @@ function parseSSEChunk(buffer, onEvent) {
 
 async function streamAgent(message, retryOnForbidden = true) {
   sendBtn.disabled = true;
-  const answerNode = appendAnswerNode();
+  let answerNode = null;
   let buffer = "";
 
   try {
@@ -212,7 +226,7 @@ async function streamAgent(message, retryOnForbidden = true) {
       });
       if (res.status === 403 && retryOnForbidden) {
         sessionIdInput.value = newSessionId();
-        answerNode.remove();
+        answerNode?.remove();
         appendEvent("session_reset", {
           session_id: sessionIdInput.value,
           reason: "会话归属冲突，已自动创建新会话并重试。",
@@ -236,11 +250,12 @@ async function streamAgent(message, retryOnForbidden = true) {
       buffer += decoder.decode(value, { stream: true });
       buffer = parseSSEChunk(buffer, (type, payload) => {
         if (type === "message_delta") {
+          answerNode ??= appendAnswerNode();
           answerNode.textContent += payload.delta ?? "";
           timeline.scrollTop = timeline.scrollHeight;
           return;
         }
-        appendEvent(type, payload);
+        appendEvent(type, displayPayload(type, payload));
       });
     }
 
@@ -248,11 +263,12 @@ async function streamAgent(message, retryOnForbidden = true) {
     if (buffer.trim() !== "") {
       parseSSEChunk(`${buffer}\n\n`, (type, payload) => {
         if (type === "message_delta") {
+          answerNode ??= appendAnswerNode();
           answerNode.textContent += payload.delta ?? "";
           timeline.scrollTop = timeline.scrollHeight;
           return;
         }
-        appendEvent(type, payload);
+        appendEvent(type, displayPayload(type, payload));
       });
     }
   } catch (err) {
