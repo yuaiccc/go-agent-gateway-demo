@@ -67,7 +67,18 @@ func (s *Service) Run(ctx context.Context, cfg tenant.Config, req ChatRequest, e
 	var observations []tool.Result
 	for _, call := range calls {
 		if !cfg.AllowsTool(call.Name) {
-			return emit(errorEvent(base, fmt.Sprintf("tenant %s cannot use tool %s", cfg.ID, call.Name)))
+			skipped := base
+			skipped.ToolCallID = call.ID
+			skipped.ToolName = call.Name
+			skipped.Status = "skipped"
+			skipped.Timestamp = time.Now()
+			skipped.Type = "tool_call_result"
+			skipped.Error = fmt.Sprintf("tenant %s cannot use tool %s", cfg.ID, call.Name)
+			skipped.Data = map[string]any{"arguments": call.Arguments}
+			if err := emit(skipped); err != nil {
+				return err
+			}
+			continue
 		}
 
 		start := base

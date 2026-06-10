@@ -105,6 +105,35 @@ function selectedTenant() {
   return tenants.find((tenant) => tenant.id === tenantSelect.value);
 }
 
+function messageNeedsGrammar(message) {
+  const lower = message.toLowerCase();
+  return (
+    message.includes("て形") ||
+    message.includes("敬语") ||
+    message.includes("尊敬语") ||
+    lower.includes("grammar") ||
+    message.includes("食べる") ||
+    message.includes("召し上がる")
+  );
+}
+
+function ensureTenantForMessage(message) {
+  const tenant = selectedTenant();
+  if (!tenant || !messageNeedsGrammar(message) || tenant.tools.includes("search_grammar")) {
+    return;
+  }
+  const jpTenant = tenants.find((item) => item.id === "tenant-jp");
+  if (!jpTenant) return;
+
+  tenantSelect.value = jpTenant.id;
+  sessionIdInput.value = newSessionId();
+  updateModelCard();
+  appendEvent("session_reset", {
+    session_id: sessionIdInput.value,
+    reason: "这条问题需要语法检索，已自动切到日语学习租户并创建新会话。",
+  });
+}
+
 function updateModelCard() {
   const tenant = selectedTenant();
   if (!tenant) return;
@@ -247,6 +276,7 @@ form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const message = messageInput.value.trim();
   if (!message) return;
+  ensureTenantForMessage(message);
   appendEvent("user_message", { message });
   await streamAgent(message);
 });
