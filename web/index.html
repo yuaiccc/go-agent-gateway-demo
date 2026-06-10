@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Go Agent Gateway Demo</title>
+    <title>智能体网关演示</title>
     <link rel="stylesheet" href="/assets/styles.css" />
   </head>
   <body>
@@ -12,23 +12,23 @@
         <div class="brand">
           <div class="mark">AG</div>
           <div>
-            <h1>Agent Gateway</h1>
-            <p>Go/Gin 多租户 Agent 后端原型</p>
+            <h1>智能体网关</h1>
+            <p>Go/Gin 多租户智能体后端原型</p>
           </div>
         </div>
 
         <label>
-          Tenant
+          租户
           <select id="tenant"></select>
         </label>
 
         <label>
-          User ID
+          用户 ID
           <input id="userId" value="user-001" />
         </label>
 
         <label>
-          Session ID
+          会话 ID
           <input id="sessionId" value="sess-demo" />
         </label>
 
@@ -41,7 +41,7 @@
         <button id="modelToggleBtn" type="button" class="wide-btn">切换模型</button>
 
         <div class="tools">
-          <h2>MCP-style Tools</h2>
+          <h2>MCP 风格工具</h2>
           <ul id="toolList"></ul>
         </div>
       </section>
@@ -49,8 +49,8 @@
       <section class="panel chat">
         <header class="chat-header">
           <div>
-            <h2>流式 Agent 对话</h2>
-            <p>观察 tool_call_start、tool_call_result、message_delta 和 done 事件</p>
+            <h2>流式智能体对话</h2>
+            <p>观察运行开始、工具调用、工具结果、增量输出和完成事件</p>
           </div>
           <button id="clearBtn" type="button">清空</button>
         </header>

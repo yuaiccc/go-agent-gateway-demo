@@ -13,12 +13,34 @@ const clearBtn = document.querySelector("#clearBtn");
 
 let tenants = [];
 
+const eventNames = {
+  ready: "准备就绪",
+  user_message: "用户消息",
+  run_start: "运行开始",
+  tool_call_start: "工具调用开始",
+  tool_call_result: "工具调用结果",
+  message_delta: "回答增量",
+  done: "运行完成",
+  error: "错误",
+  model_updated: "模型已切换",
+};
+
+const tenantNames = {
+  "tenant-jp": "日语学习租户",
+  "tenant-code": "代码智能体租户",
+};
+
+const toolNames = {
+  search_grammar: "语法检索",
+  search_memory: "记忆检索",
+};
+
 function appendEvent(type, payload) {
   const node = document.createElement("article");
   node.className = `event ${type === "error" ? "error" : ""}`;
   node.innerHTML = `
     <div class="event-head">
-      <span class="event-type">${type}</span>
+      <span class="event-type">${eventNames[type] ?? type}</span>
       <span>${new Date().toLocaleTimeString()}</span>
     </div>
     <pre>${escapeHtml(JSON.stringify(payload, null, 2))}</pre>
@@ -47,7 +69,10 @@ async function loadTenants() {
   const data = await res.json();
   tenants = data.tenants ?? [];
   tenantSelect.innerHTML = tenants
-    .map((tenant) => `<option value="${tenant.id}">${tenant.name}</option>`)
+    .map(
+      (tenant) =>
+        `<option value="${tenant.id}">${tenantNames[tenant.id] ?? tenant.name}</option>`,
+    )
     .join("");
   if (tenants.some((tenant) => tenant.id === "tenant-jp")) {
     tenantSelect.value = "tenant-jp";
@@ -63,7 +88,7 @@ async function loadTools() {
       (tool) => `
         <li>
           <strong>${tool.name}</strong>
-          ${tool.description}
+          ${toolNames[tool.name] ?? tool.description}
         </li>
       `,
     )
@@ -78,9 +103,9 @@ function updateModelCard() {
   const tenant = selectedTenant();
   if (!tenant) return;
   modelName.textContent = tenant.model.model;
-  modelProvider.textContent = `${tenant.model.provider}, temperature ${tenant.model.temperature}`;
+  modelProvider.textContent = `供应商：${tenant.model.provider}，温度：${tenant.model.temperature}`;
   modelToggleBtn.textContent =
-    tenant.model.provider === "deepseek" ? "切回 Mock" : "切到 DeepSeek";
+    tenant.model.provider === "deepseek" ? "切回模拟模型" : "切到 DeepSeek";
 }
 
 function parseSSEChunk(buffer, onEvent) {
@@ -189,5 +214,5 @@ form.addEventListener("submit", async (event) => {
 await loadTenants();
 await loadTools();
 appendEvent("ready", {
-  hint: "发送一条消息，观察 Agent Gateway 如何推送工具调用和流式答案。",
+  hint: "发送一条消息，观察智能体网关如何推送工具调用和流式答案。",
 });

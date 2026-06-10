@@ -1,16 +1,16 @@
-# Go Agent Gateway Demo
+# Go 智能体网关演示
 
-一个用于学习 Agent 后端平台的最小 Go/Gin demo。它不是完整生产系统，而是把面试里常见的概念拆成可运行代码：
+一个用于学习智能体后端平台的最小 Go/Gin 演示项目。它不是完整生产系统，而是把面试里常见的概念拆成可运行代码：
 
 - 多租户：`tenant_id` 决定模型配置、知识库和可用工具。
-- Session/User 绑定：同一个 `session_id` 只能属于一个 `tenant_id + user_id`。
+- 会话/用户绑定：同一个 `session_id` 只能属于一个 `tenant_id + user_id`。
 - Tool Registry：工具注册、发现、调用和权限检查。
 - SSE 流式事件：推送 `run_start`、`tool_call_start`、`tool_call_result`、`message_delta`、`done`。
 - MCP-style API：提供简化版 `/mcp/tools/list` 和 `/mcp/tools/call`。
 - 内置前端：访问 `/` 直接观察租户、工具调用和 SSE 流式输出。
-- DeepSeek/OpenAI-compatible model adapter：通过环境变量接真实模型，不把 API key 写进仓库。
+- DeepSeek/OpenAI 兼容模型适配器：通过环境变量接真实模型，不把 API key 写进仓库。
 
-## Run
+## 运行
 
 ```bash
 cd /Users/xujunshan/Code/go-agent-gateway-demo
@@ -48,19 +48,19 @@ http://localhost:8088
 
 ## API
 
-### Health
+### 健康检查
 
 ```bash
 curl http://localhost:8088/healthz
 ```
 
-### List Tenants
+### 查看租户
 
 ```bash
 curl http://localhost:8088/api/tenants
 ```
 
-### Hot Update Tenant Model
+### 热更新租户模型
 
 这个接口模拟“多租户模型热更新”。只会影响目标租户，不影响其他租户。
 
@@ -70,7 +70,7 @@ curl -X PATCH http://localhost:8088/api/tenants/tenant-jp/model \
   -d '{"provider":"mock","model":"mock-japanese-tutor-v2","temperature":0.3}'
 ```
 
-### Stream Agent
+### 流式调用智能体
 
 ```bash
 curl -N -X POST http://localhost:8088/api/agent/stream \
@@ -102,7 +102,7 @@ event: done
 data: {...}
 ```
 
-### MCP-style Tools
+### MCP 风格工具
 
 列出工具：
 
@@ -124,7 +124,7 @@ curl -X POST http://localhost:8088/mcp/tools/call \
   }'
 ```
 
-## Architecture
+## 架构
 
 ```text
 HTTP/SSE Client
@@ -151,20 +151,20 @@ web/index.html              无构建步骤的演示前端
 web/assets/app.js           fetch + ReadableStream 解析 SSE
 ```
 
-## Interview Mapping
+## 面试题对应关系
 
 这个 demo 对应面试题：
 
 - 多模型支持架构：看 `tenant.ModelConfig`。
 - 多租户模型热更新：看 `PATCH /api/tenants/:tenantID/model`。
 - 模型 provider 适配：看 `internal/model/client.go`。
-- Agent 状态：看 SSE event type。
-- Session/User 绑定：看 `session.Store.ValidateOwner`。
+- 智能体状态：看 SSE event type。
+- 会话/用户绑定：看 `session.Store.ValidateOwner`。
 - 工具调用流程：看 `agent.Service.Run` 和 `tool.Registry.Call`。
 - SSE 数据格式：看 `gateway.streamAgent`。
 - MCP 交互流程：看 `/mcp/tools/list` 和 `/mcp/tools/call`。
 
-## What This Demo Omits
+## 暂未实现
 
 为了保持教学清晰，暂时没有做：
 
