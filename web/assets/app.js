@@ -23,6 +23,7 @@ const eventNames = {
   done: "运行完成",
   error: "错误",
   model_updated: "模型已切换",
+  session_reset: "会话已重置",
 };
 
 const tenantNames = {
@@ -34,6 +35,10 @@ const toolNames = {
   search_grammar: "语法检索",
   search_memory: "记忆检索",
 };
+
+function newSessionId() {
+  return `sess-${Date.now()}`;
+}
 
 function appendEvent(type, payload) {
   const node = document.createElement("article");
@@ -108,6 +113,15 @@ function updateModelCard() {
     tenant.model.provider === "deepseek" ? "切回模拟模型" : "切到 DeepSeek";
 }
 
+function switchTenant() {
+  sessionIdInput.value = newSessionId();
+  updateModelCard();
+  appendEvent("session_reset", {
+    session_id: sessionIdInput.value,
+    reason: "租户已切换，已自动创建新的会话，避免和旧租户串号。",
+  });
+}
+
 function parseSSEChunk(buffer, onEvent) {
   const parts = buffer.split("\n\n");
   const rest = parts.pop() ?? "";
@@ -148,7 +162,21 @@ async function streamAgent(message) {
 
   if (!res.ok || !res.body) {
     const text = await res.text();
-    appendEvent("error", { status: res.status, body: text });
+    let body = text;
+    try {
+      body = JSON.parse(text);
+    } catch {}
+    appendEvent("error", {
+      status: res.status,
+      body,
+      hint:
+        res.status === 403
+          ? "当前会话 ID 已经属于其他租户或用户。已自动换一个新会话，请再发送一次。"
+          : undefined,
+    });
+    if (res.status === 403) {
+      sessionIdInput.value = newSessionId();
+    }
     sendBtn.disabled = false;
     return;
   }
@@ -174,7 +202,7 @@ async function streamAgent(message) {
   sendBtn.disabled = false;
 }
 
-tenantSelect.addEventListener("change", updateModelCard);
+tenantSelect.addEventListener("change", switchTenant);
 modelToggleBtn.addEventListener("click", async () => {
   const tenant = selectedTenant();
   const nextModel =
