@@ -7,6 +7,7 @@
 - Tool Registry：工具注册、发现、调用和权限检查。
 - SSE 流式事件：推送 `run_start`、`tool_call_start`、`tool_call_result`、`message_delta`、`done`。
 - MCP-style API：提供简化版 `/mcp/tools/list` 和 `/mcp/tools/call`。
+- 内置前端：访问 `/` 直接观察租户、工具调用和 SSE 流式输出。
 
 ## Run
 
@@ -17,6 +18,12 @@ go run ./cmd/server
 ```
 
 默认监听：
+
+```text
+http://localhost:8088
+```
+
+打开浏览器访问：
 
 ```text
 http://localhost:8088
@@ -122,6 +129,8 @@ internal/agent/agent.go     简化 tool-call loop
 internal/tool/registry.go   工具注册、发现、调用
 internal/tenant/store.go    租户模型配置和热更新
 internal/session/store.go   session 与 user/tenant 绑定
+web/index.html              无构建步骤的演示前端
+web/assets/app.js           fetch + ReadableStream 解析 SSE
 ```
 
 ## Interview Mapping

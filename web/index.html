@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Go Agent Gateway Demo</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="panel sidebar">
+        <div class="brand">
+          <div class="mark">AG</div>
+          <div>
+            <h1>Agent Gateway</h1>
+            <p>Go/Gin 多租户 Agent 后端原型</p>
+          </div>
+        </div>
+
+        <label>
+          Tenant
+          <select id="tenant"></select>
+        </label>
+
+        <label>
+          User ID
+          <input id="userId" value="user-001" />
+        </label>
+
+        <label>
+          Session ID
+          <input id="sessionId" value="sess-demo" />
+        </label>
+
+        <div class="model-card">
+          <span>当前模型</span>
+          <strong id="modelName">loading...</strong>
+          <small id="modelProvider"></small>
+        </div>
+
+        <div class="tools">
+          <h2>MCP-style Tools</h2>
+          <ul id="toolList"></ul>
+        </div>
+      </section>
+
+      <section class="panel chat">
+        <header class="chat-header">
+          <div>
+            <h2>流式 Agent 对话</h2>
+            <p>观察 tool_call_start、tool_call_result、message_delta 和 done 事件</p>
+          </div>
+          <button id="clearBtn" type="button">清空</button>
+        </header>
+
+        <div id="timeline" class="timeline"></div>
+
+        <form id="chatForm" class="composer">
+          <textarea id="message" rows="3">食べる的て形是什么？顺便看看我的记忆薄弱点</textarea>
+          <button id="sendBtn" type="submit">发送</button>
+        </form>
+      </section>
+    </main>
+
+    <script src="/assets/app.js"></script>
+  </body>
+</html>

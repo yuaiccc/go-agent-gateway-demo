@@ -33,6 +33,9 @@ func NewServer() *Server {
 func (s *Server) Router() *gin.Engine {
 	r := gin.Default()
 
+	r.StaticFile("/", "./web/index.html")
+	r.Static("/assets", "./web/assets")
+
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	})
