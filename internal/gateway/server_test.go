@@ -58,3 +58,20 @@ func TestTenantModelHotUpdate(t *testing.T) {
 		t.Fatalf("expected updated model in response: %s", rec.Body.String())
 	}
 }
+
+func TestStreamAgentRejectsEmptyMessage(t *testing.T) {
+	server := NewServer()
+	body := strings.NewReader(`{"tenant_id":"tenant-jp","user_id":"user-001","session_id":"sess-empty","message":"   "}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/agent/stream", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	server.Router().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "tenant_id, user_id and message are required") {
+		t.Fatalf("expected validation error, got: %s", rec.Body.String())
+	}
+}

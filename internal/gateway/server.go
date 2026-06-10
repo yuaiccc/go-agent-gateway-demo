@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -86,6 +87,14 @@ func (s *Server) streamAgent(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	req.TenantID = strings.TrimSpace(req.TenantID)
+	req.UserID = strings.TrimSpace(req.UserID)
+	req.SessionID = strings.TrimSpace(req.SessionID)
+	req.Message = strings.TrimSpace(req.Message)
+	if req.TenantID == "" || req.UserID == "" || req.Message == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id, user_id and message are required"})
+		return
+	}
 	if req.SessionID == "" {
 		req.SessionID = fmt.Sprintf("sess-%d", time.Now().UnixMilli())
 	}
@@ -103,7 +112,10 @@ func (s *Server) streamAgent(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	_, _ = s.Sessions.Append(c.Request.Context(), req.SessionID, "user", req.Message)
+	if _, err := s.Sessions.Append(c.Request.Context(), req.SessionID, "user", req.Message); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
@@ -148,7 +160,17 @@ func (s *Server) streamAgent(c *gin.Context) {
 		return
 	}
 	if finalAnswer != "" {
-		_, _ = s.Sessions.Append(c.Request.Context(), req.SessionID, "assistant", finalAnswer)
+		if _, err := s.Sessions.Append(c.Request.Context(), req.SessionID, "assistant", finalAnswer); err != nil {
+			_ = emit(agent.Event{
+				Type:      "error",
+				TenantID:  req.TenantID,
+				UserID:    req.UserID,
+				SessionID: req.SessionID,
+				Status:    "failed",
+				Error:     err.Error(),
+				Timestamp: time.Now(),
+			})
+		}
 	}
 }
 

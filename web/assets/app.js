@@ -71,6 +71,7 @@ function escapeHtml(value) {
 
 async function loadTenants() {
   const res = await fetch("/api/tenants");
+  if (!res.ok) throw new Error(`加载租户失败：${res.status}`);
   const data = await res.json();
   tenants = data.tenants ?? [];
   tenantSelect.innerHTML = tenants
@@ -88,6 +89,7 @@ async function loadTenants() {
 
 async function loadTools() {
   const res = await fetch("/mcp/tools/list");
+  if (!res.ok) throw new Error(`加载工具失败：${res.status}`);
   const data = await res.json();
   toolList.innerHTML = (data.tools ?? [])
     .map(
@@ -159,11 +161,14 @@ function parseSSEChunk(buffer, onEvent) {
   for (const part of parts) {
     const lines = part.split("\n");
     const eventLine = lines.find((line) => line.startsWith("event:"));
-    const dataLine = lines.find((line) => line.startsWith("data:"));
-    if (!eventLine || !dataLine) continue;
+    const dataLines = lines.filter((line) => line.startsWith("data:"));
+    if (!eventLine || dataLines.length === 0) continue;
 
     const type = eventLine.slice("event:".length).trim();
-    const rawData = dataLine.slice("data:".length).trim();
+    const rawData = dataLines
+      .map((line) => line.slice("data:".length).trimStart())
+      .join("\n")
+      .trim();
     try {
       onEvent(type, JSON.parse(rawData));
     } catch {
@@ -179,94 +184,122 @@ async function streamAgent(message, retryOnForbidden = true) {
   const answerNode = appendAnswerNode();
   let buffer = "";
 
-  const res = await fetch("/api/agent/stream", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      tenant_id: tenantSelect.value,
-      user_id: userIdInput.value,
-      session_id: sessionIdInput.value,
-      message,
-    }),
-  });
-
-  if (!res.ok || !res.body) {
-    const text = await res.text();
-    let body = text;
-    try {
-      body = JSON.parse(text);
-    } catch {}
-    appendEvent("error", {
-      status: res.status,
-      body,
-      hint:
-        res.status === 403
-          ? "当前会话 ID 已经属于其他租户或用户。已自动换一个新会话。"
-          : undefined,
-    });
-    if (res.status === 403 && retryOnForbidden) {
-      sessionIdInput.value = newSessionId();
-      answerNode.remove();
-      appendEvent("session_reset", {
+  try {
+    const res = await fetch("/api/agent/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tenant_id: tenantSelect.value,
+        user_id: userIdInput.value,
         session_id: sessionIdInput.value,
-        reason: "会话归属冲突，已自动创建新会话并重试。",
+        message,
+      }),
+    });
+
+    if (!res.ok || !res.body) {
+      const text = await res.text();
+      let body = text;
+      try {
+        body = JSON.parse(text);
+      } catch {}
+      appendEvent("error", {
+        status: res.status,
+        body,
+        hint:
+          res.status === 403
+            ? "当前会话 ID 已经属于其他租户或用户。已自动换一个新会话。"
+            : undefined,
       });
-      await streamAgent(message, false);
-      sendBtn.disabled = false;
-      return;
-    }
-    if (res.status === 403) {
-      sessionIdInput.value = newSessionId();
-    }
-    sendBtn.disabled = false;
-    return;
-  }
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    buffer = parseSSEChunk(buffer, (type, payload) => {
-      if (type === "message_delta") {
-        answerNode.textContent += payload.delta ?? "";
-        timeline.scrollTop = timeline.scrollHeight;
+      if (res.status === 403 && retryOnForbidden) {
+        sessionIdInput.value = newSessionId();
+        answerNode.remove();
+        appendEvent("session_reset", {
+          session_id: sessionIdInput.value,
+          reason: "会话归属冲突，已自动创建新会话并重试。",
+        });
+        await streamAgent(message, false);
         return;
       }
-      appendEvent(type, payload);
-    });
-  }
+      if (res.status === 403) {
+        sessionIdInput.value = newSessionId();
+      }
+      return;
+    }
 
-  sendBtn.disabled = false;
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      buffer = parseSSEChunk(buffer, (type, payload) => {
+        if (type === "message_delta") {
+          answerNode.textContent += payload.delta ?? "";
+          timeline.scrollTop = timeline.scrollHeight;
+          return;
+        }
+        appendEvent(type, payload);
+      });
+    }
+
+    buffer += decoder.decode();
+    if (buffer.trim() !== "") {
+      parseSSEChunk(`${buffer}\n\n`, (type, payload) => {
+        if (type === "message_delta") {
+          answerNode.textContent += payload.delta ?? "";
+          timeline.scrollTop = timeline.scrollHeight;
+          return;
+        }
+        appendEvent(type, payload);
+      });
+    }
+  } catch (err) {
+    appendEvent("error", {
+      error: err instanceof Error ? err.message : String(err),
+      hint: "请求没有完成，请确认后端服务仍在运行。",
+    });
+  } finally {
+    sendBtn.disabled = false;
+  }
 }
 
 tenantSelect.addEventListener("change", switchTenant);
 modelToggleBtn.addEventListener("click", async () => {
   const tenant = selectedTenant();
+  if (!tenant) return;
   const nextModel =
-    tenant?.model.provider === "deepseek"
+    tenant.model.provider === "deepseek"
       ? {
           provider: "mock",
-          model: "mock-japanese-tutor",
+          model: tenant.id === "tenant-code" ? "mock-coding-agent" : "mock-japanese-tutor",
           temperature: 0.2,
         }
       : {
           provider: "deepseek",
           model: "deepseek-chat",
           temperature: 0.3,
-        };
-  const res = await fetch(`/api/tenants/${tenantSelect.value}/model`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(nextModel),
-  });
-  const updated = await res.json();
-  tenants = tenants.map((tenant) => (tenant.id === updated.id ? updated : tenant));
-  updateModelCard();
-  appendEvent("model_updated", updated.model ?? updated);
+      };
+  modelToggleBtn.disabled = true;
+  try {
+    const res = await fetch(`/api/tenants/${tenantSelect.value}/model`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(nextModel),
+    });
+    const updated = await res.json();
+    if (!res.ok) throw new Error(updated.error ?? `模型切换失败：${res.status}`);
+    tenants = tenants.map((tenant) => (tenant.id === updated.id ? updated : tenant));
+    updateModelCard();
+    appendEvent("model_updated", updated.model ?? updated);
+  } catch (err) {
+    appendEvent("error", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  } finally {
+    modelToggleBtn.disabled = false;
+  }
 });
 clearBtn.addEventListener("click", () => {
   timeline.innerHTML = "";
@@ -281,8 +314,15 @@ form.addEventListener("submit", async (event) => {
   await streamAgent(message);
 });
 
-await loadTenants();
-await loadTools();
-appendEvent("ready", {
-  hint: "发送一条消息，观察智能体网关如何推送工具调用和流式答案。",
-});
+try {
+  await loadTenants();
+  await loadTools();
+  appendEvent("ready", {
+    hint: "发送一条消息，观察智能体网关如何推送工具调用和流式答案。",
+  });
+} catch (err) {
+  appendEvent("error", {
+    error: err instanceof Error ? err.message : String(err),
+    hint: "初始化失败，请确认后端服务和静态资源都已启动。",
+  });
+}
